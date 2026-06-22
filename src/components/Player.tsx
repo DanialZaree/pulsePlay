@@ -73,14 +73,14 @@ const Player: React.FC<PlayerProps> = ({
     });
     audio.addEventListener("error", () => {
       if (!audio.src || audio.src === window.location.href || audio.src.startsWith("data:")) return;
-      
+
       const track = currentTrackRef.current;
       if (track && !track.previewUrl && !useYtFallbackRef.current) {
         console.warn("[Player] Audio error event fired (e.g. 403). Falling back to YouTube iframe.");
         setUseYtFallbackRef.current(true);
         return;
       }
-      
+
       setIsPlayingRef.current(false);
       setTimeout(() => setError("Playback failed. Try another song."), 0);
     });
@@ -120,7 +120,7 @@ const Player: React.FC<PlayerProps> = ({
     audio.src = "";
 
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.pauseVideo(); } catch (e) {}
+      try { ytPlayerRef.current.pauseVideo(); } catch (e) { }
     }
 
     let cancelled = false;
@@ -167,7 +167,7 @@ const Player: React.FC<PlayerProps> = ({
         setIsPlaying(true);
       } catch (e: any) {
         if (cancelled) return;
-        
+
         if (e.name !== "NotAllowedError" && currentTrack && !currentTrack.previewUrl && !useYtFallback) {
           console.warn("[Player] Audio playback rejected. Falling back to YouTube iframe.", e);
           setUseYtFallback(true);
@@ -280,6 +280,7 @@ const Player: React.FC<PlayerProps> = ({
           <YouTube
             videoId={currentTrack.id}
             opts={{
+              host: "https://www.youtube-nocookie.com",
               playerVars: { autoplay: 1, controls: 0, playsinline: 1, origin: window.location.origin }
             }}
             onReady={(e) => {
@@ -328,7 +329,8 @@ const Player: React.FC<PlayerProps> = ({
             )}
             {error && !loading && (
               <div
-                className="pointer-events-auto text-[10px] text-rose-300 font-semibold bg-rose-500/20 px-3 py-1 rounded-full border border-rose-500/20 shadow-lg truncate max-w-[80%] cursor-pointer hover:bg-rose-500/30 transition-colors"
+                className="pointer-events-auto text-[10px] text-rose-300 font-semibold bg-rose-500/20 px-3 py-1 rounded-full border border-rose-500/20 shadow-lg truncate max-w-[80%] cursor-pointer hover:bg-rose-500/30 transition-colors relative"
+                style={{ left: "50px" }}
                 onClick={togglePlay}
                 title="Click to retry"
               >
