@@ -135,6 +135,10 @@ const DotField = memo(({
     let frameCount = 0;
 
     function tick() {
+      if (document.hidden) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
       frameCount++;
       const dots = dotsRef.current;
       const m = mouseRef.current;

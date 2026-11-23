@@ -157,6 +157,10 @@ export default React.memo(function ColorBends({
   const pointerTargetRef = useRef<THREE.Vector2>(new THREE.Vector2(0, 0));
   const pointerCurrentRef = useRef<THREE.Vector2>(new THREE.Vector2(0, 0));
   const pointerSmoothRef = useRef<number>(8);
+  const targetColorsRef = useRef<THREE.Vector3[]>(
+    Array.from({ length: MAX_COLORS }, () => new THREE.Vector3(0, 0, 0))
+  );
+  const targetColorCountRef = useRef<number>(0);
 
   useEffect(() => {
     const container = containerRef.current!;
@@ -230,8 +234,13 @@ export default React.memo(function ColorBends({
     }
 
     const loop = () => {
+      rafRef.current = requestAnimationFrame(loop);
       const now = performance.now();
-      const dt = (now - lastTime) / 1000;
+      if (document.hidden) {
+        lastTime = now;
+        return;
+      }
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
       lastTime = now;
       elapsed += dt;
       material.uniforms.uTime.value = elapsed;
@@ -247,8 +256,17 @@ export default React.memo(function ColorBends({
       const amt = Math.min(1, dt * pointerSmoothRef.current);
       cur.lerp(tgt, amt);
       (material.uniforms.uPointer.value as THREE.Vector2).copy(cur);
+
+      // Smoothly morph colors when theme or album art changes
+      const uColors = material.uniforms.uColors.value as THREE.Vector3[];
+      const targets = targetColorsRef.current;
+      const colorLerp = Math.min(1, dt * 3.5);
+      for (let i = 0; i < MAX_COLORS; i++) {
+        uColors[i].lerp(targets[i], colorLerp);
+      }
+      material.uniforms.uColorCount.value = targetColorCountRef.current;
+
       renderer.render(scene, camera);
-      rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
 
@@ -294,11 +312,18 @@ export default React.memo(function ColorBends({
     };
 
     const arr = (colors || []).filter(Boolean).slice(0, MAX_COLORS).map(toVec3);
+    const currentColors = material.uniforms.uColors.value as THREE.Vector3[];
+    const isInitial = targetColorCountRef.current === 0 && arr.length > 0;
     for (let i = 0; i < MAX_COLORS; i++) {
-      const vec = (material.uniforms.uColors.value as THREE.Vector3[])[i];
-      if (i < arr.length) vec.copy(arr[i]);
-      else vec.set(0, 0, 0);
+      if (i < arr.length) {
+        targetColorsRef.current[i].copy(arr[i]);
+        if (isInitial) currentColors[i].copy(arr[i]);
+      } else {
+        targetColorsRef.current[i].set(0, 0, 0);
+        if (isInitial) currentColors[i].set(0, 0, 0);
+      }
     }
+    targetColorCountRef.current = arr.length;
     material.uniforms.uColorCount.value = arr.length;
 
     material.uniforms.uTransparent.value = transparent ? 1 : 0;
@@ -332,9 +357,9 @@ export default React.memo(function ColorBends({
       pointerTargetRef.current.set(x, y);
     };
 
-    container.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
     return () => {
-      container.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointermove', handlePointerMove);
     };
   }, []);
 

@@ -1,20 +1,5 @@
-export interface Track {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  duration: number; // in seconds
-  coverUrl: string;
-  previewUrl: string | null;
-}
-
-export interface Playlist {
-  id: string;
-  name: string;
-  description: string;
-  coverUrl: string;
-  tracks: Track[];
-}
+import type { Track, Playlist } from "../types/music";
+export type { Track, Playlist };
 
 /**
  * Extracts a playlist ID from a Spotify playlist URL or returns it directly if it's already an ID.

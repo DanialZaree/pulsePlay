@@ -4,16 +4,82 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-tauri:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Find or create draft release
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.version.outputs.version }}';
+            const tagName = `app-v${version}`;
+            const { owner, repo } = context.repo;
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            let release = releases.find((r) => r.tag_name === tagName);
+            if (!release) {
+              const created = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tagName,
+                name: `PulsePlay v${version}`,
+                body: 'See the assets below to download and install PulsePlay for Windows, macOS, Linux, or Android.',
+                draft: true,
+                prerelease: false,
+              });
+              release = created.data;
+            }
+
+            core.setOutput('release_id', String(release.id));
+            core.setOutput('tag_name', tagName);
+
+  build-desktop:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-22.04, windows-latest]
+        include:
+          - name: macos-arm64
+            platform: macos-latest
+            rust_target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - name: macos-x64
+            platform: macos-latest
+            rust_target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - name: linux-x64
+            platform: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            args: ''
+          - name: windows-x64
+            platform: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -24,7 +90,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,18 +100,177 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'ubuntu-22.04' && 'x86_64-unknown-linux-gnu' || 'x86_64-pc-windows-msvc' }}
+          targets: ${{ matrix.rust_target }}
 
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build Tauri app
+      - name: Build Tauri desktop app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: '1'
         with:
-          tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
-          releaseName: 'PulsePlay v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
+
+  build-android:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configure Android NDK
+        run: |
+          NDK_ROOT=""
+          if [ -d "$ANDROID_HOME/ndk" ]; then
+            LATEST_NDK=$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1 || true)
+            if [ -n "$LATEST_NDK" ]; then
+              NDK_ROOT="$ANDROID_HOME/ndk/$LATEST_NDK"
+            fi
+          fi
+          if [ -z "$NDK_ROOT" ]; then
+            yes | sdkmanager --licenses >/dev/null || true
+            sdkmanager "ndk;27.2.12479018"
+            NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018"
+          fi
+          echo "NDK_HOME=$NDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Initialize Tauri Android project
+        run: npx tauri android init --ci --skip-targets-install
+
+      - name: Enable cleartext localhost traffic in AndroidManifest
+        run: |
+          MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          node -e '
+            const fs = require("fs");
+            const p = process.argv[1];
+            let xml = fs.readFileSync(p, "utf8");
+            if (!xml.includes("android:usesCleartextTraffic")) {
+              xml = xml.replace("<application", "<application\n        android:usesCleartextTraffic=\"true\"");
+              fs.writeFileSync(p, xml, "utf8");
+            }
+          ' "$MANIFEST"
+
+      - name: Build Android APK (arm64)
+        run: npx tauri android build --apk --ci --target aarch64
+
+      - name: Align and sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          if [ -z "$RAW_APK" ]; then
+            echo "No APK found under src-tauri/gen/android/app/build/outputs/apk"
+            exit 1
+          fi
+          echo "Found APK: $RAW_APK"
+
+          BUILD_TOOLS_DIR=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)
+          ZIPALIGN="$ANDROID_HOME/build-tools/$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS_DIR/apksigner"
+
+          ALIGNED_APK="aligned.apk"
+          OUT_APK="PulsePlay-v${VERSION}-android-arm64.apk"
+
+          "$ZIPALIGN" -f -p 4 "$RAW_APK" "$ALIGNED_APK"
+
+          KEYSTORE_PATH="/tmp/pulseplay-release.jks"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+            KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+            KEY_ALIAS="$ANDROID_KEY_ALIAS"
+            KEY_PASS="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          else
+            KS_PASS="pulseplay123"
+            KEY_ALIAS="pulseplay"
+            KEY_PASS="pulseplay123"
+            keytool -genkeypair -v -keystore "$KEYSTORE_PATH" -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+              -dname "CN=PulsePlay, O=PulsePlay, C=US"
+          fi
+
+          "$APKSIGNER" sign \
+            --ks "$KEYSTORE_PATH" \
+            --ks-pass "pass:$KS_PASS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASS" \
+            --out "$OUT_APK" \
+            "$ALIGNED_APK"
+
+          "$APKSIGNER" verify "$OUT_APK"
+          rm -f "$KEYSTORE_PATH" "$ALIGNED_APK"
+
+      - name: Upload APK workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulsePlay-v${{ needs.create-release.outputs.version }}-android-arm64
+          path: PulsePlay-v${{ needs.create-release.outputs.version }}-android-arm64.apk
+
+      - name: Upload APK to draft GitHub release
+        uses: actions/github-script@v7
+        env:
+          OUT_APK: PulsePlay-v${{ needs.create-release.outputs.version }}-android-arm64.apk
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const releaseId = Number('${{ needs.create-release.outputs.release_id }}');
+            const assetName = process.env.OUT_APK;
+
+            const { data: assets } = await github.rest.repos.listReleaseAssets({
+              owner,
+              repo,
+              release_id: releaseId,
+              per_page: 100,
+            });
+            const existing = assets.find((a) => a.name === assetName);
+            if (existing) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner,
+                repo,
+                asset_id: existing.id,
+              });
+            }
+
+            const data = fs.readFileSync(assetName);
+            await github.rest.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id: releaseId,
+              name: assetName,
+              data,
+              headers: {
+                'content-type': 'application/vnd.android.package-archive',
+                'content-length': data.length,
+              },
+            });

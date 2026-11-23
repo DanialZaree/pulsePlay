@@ -61,24 +61,21 @@
   --font-label-sm: "Geist", "Vazirmatn", sans-serif;
   --font-headline-md: "Hanken Grotesk", "Vazirmatn", sans-serif;
   --font-body-md: "Manrope", "Vazirmatn", sans-serif;
-
-  /* Since tailwind v4 handles fonts dynamically, we also map custom text styles provided */
 }
 
 @layer base {
   :root {
-    --glass-border: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%);
+    --glass-border: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 100%);
   }
 
   body {
-    background-color: var(--color-background, #0b1326);
-    color: var(--color-on-background, #dae2fd);
+    background-color: var(--color-background, #000000);
+    color: var(--color-on-background, #ffffff);
     overflow: hidden;
     height: 100vh;
     font-family: var(--font-body-lg);
   }
 
-  /* Custom scrollbars */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -88,10 +85,10 @@
   }
   ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.15);
-    border-radius: 0px;
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(210, 187, 255, 0.4);
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -101,12 +98,11 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    border: none;
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 9999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.4); /* primary color tint on hover */
+    background: rgba(255, 255, 255, 0.4);
   }
 }
 
@@ -116,7 +112,7 @@
     backdrop-filter: blur(60px);
     -webkit-backdrop-filter: blur(60px);
     border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 
+    box-shadow:
       inset 0 1px 1px rgba(255, 255, 255, 0.2),
       0 0 20px rgba(255, 255, 255, 0.05),
       0 32px 64px rgba(0, 0, 0, 0.5);
@@ -126,62 +122,78 @@
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 
-      inset 0 1px 1px rgba(255, 255, 255, 0.2),
-      0 0 30px rgba(255, 255, 255, 0.05);
-    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.18),
+      0 12px 32px rgba(0, 0, 0, 0.28);
+    transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .glass-card:hover {
     background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-8px);
-    border-color: rgba(255, 255, 255, 0.25);
-    box-shadow: 
-      inset 0 1px 1px rgba(255, 255, 255, 0.3),
-      0 10px 40px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.25),
+      0 18px 42px rgba(0, 0, 0, 0.42);
   }
 
   .glass-btn {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15);
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
   }
 
   .glass-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
     transform: scale(1.05);
   }
 
-  .liquid-accent {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(150, 150, 150, 0.2) 50%, rgba(200, 200, 200, 0.2) 100%);
-    filter: blur(120px);
-    opacity: 0.25;
-    z-index: -1;
-    mix-blend-mode: screen;
-  }
-
-  .playhead-glow {
-    box-shadow: 0 0 15px #aaaaaa, 0 0 30px #ffffff;
-  }
-
-  .material-symbols-outlined {
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  }
-
   .lyric-inactive {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.3) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: rgba(255, 255, 255, 0.42);
   }
 
   .lyric-active {
     color: #ffffff;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    text-shadow: 0 0 22px rgba(255, 255, 255, 0.45);
+  }
+
+  .lyrics-mask {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 14%,
+      black 82%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 14%,
+      black 82%,
+      transparent 100%
+    );
+  }
+
+  .glass-full,
+  .glass-full > div,
+  .glass-full > div > div,
+  .glass-full .glass,
+  .glass-full .glass > div {
+    width: 100% !important;
+  }
+
+  .glass-full .glass {
+    display: flex !important;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .glass-full .glass > div {
+    flex: 1 1 0% !important;
+    min-width: 0;
   }
 }
 
