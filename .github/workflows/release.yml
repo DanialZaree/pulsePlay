@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'demo.png'
+      - 'banner.png'
   workflow_dispatch:
 
 permissions:
