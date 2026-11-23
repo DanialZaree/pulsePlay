@@ -132,25 +132,46 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Configure Android NDK
+      - name: Configure Android SDK & NDK
         run: |
-          NDK_ROOT=""
-          if [ -d "$ANDROID_HOME/ndk" ]; then
-            LATEST_NDK=$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1 || true)
-            if [ -n "$LATEST_NDK" ]; then
-              NDK_ROOT="$ANDROID_HOME/ndk/$LATEST_NDK"
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -d "$ANDROID_HOME" ]; then
+            echo "Android SDK directory not found at $ANDROID_HOME"
+            exit 1
+          fi
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          fi
+
+          NDK_ROOT="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}}"
+          if [ -z "$NDK_ROOT" ] || [ ! -d "$NDK_ROOT" ]; then
+            NDK_ROOT=""
+            if [ -d "$ANDROID_HOME/ndk" ]; then
+              LATEST_NDK=$(ls -1 "$ANDROID_HOME/ndk" | sort -V | tail -n 1 || true)
+              if [ -n "$LATEST_NDK" ]; then
+                NDK_ROOT="$ANDROID_HOME/ndk/$LATEST_NDK"
+              fi
             fi
           fi
-          if [ -z "$NDK_ROOT" ]; then
-            yes | sdkmanager --licenses >/dev/null || true
-            sdkmanager "ndk;27.2.12479018"
+          if [ -z "$NDK_ROOT" ] && [ -x "$SDKMANAGER" ]; then
+            "$SDKMANAGER" "ndk;27.2.12479018"
             NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018"
+          fi
+          if [ -z "$NDK_ROOT" ] || [ ! -d "$NDK_ROOT" ]; then
+            echo "Android NDK directory could not be resolved"
+            exit 1
           fi
           echo "NDK_HOME=$NDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$NDK_ROOT" >> "$GITHUB_ENV"
+          echo "Using ANDROID_HOME=$ANDROID_HOME"
+          echo "Using NDK_HOME=$NDK_ROOT"
+          ls -1 "$ANDROID_HOME/build-tools" || true
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -187,7 +208,10 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION: ${{ needs.create-release.outputs.version }}
         run: |
-          RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*-release*.apk" | head -n 1)
+          if [ -z "$RAW_APK" ]; then
+            RAW_APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          fi
           if [ -z "$RAW_APK" ]; then
             echo "No APK found under src-tauri/gen/android/app/build/outputs/apk"
             exit 1
